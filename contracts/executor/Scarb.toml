@@ -1,0 +1,25 @@
+[package]
+name        = "derrick_executor"
+version     = "0.1.0"
+edition     = "2024_07"
+description = "Atomic arbitrage multicall executor with on-chain min_profit assertion."
+
+[dependencies]
+starknet = "2.16.0"
+
+[dev-dependencies]
+# snforge_std and the snforge binary are not yet wired into the dev container.
+# When you add them, `scarb test` will pick up `tests/test_executor.cairo`.
+# snforge_std = "0.50.0"
+
+[lib]
+sierra = true
+casm = true
+
+[[target.starknet-contract]]
+sierra = true
+casm = true
+allowed-libfuncs-list.name = "audited"
+
+# [scripts]
+# test = "snforge test"

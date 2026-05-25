@@ -1,0 +1,19 @@
+[package]
+name        = "math"
+description = "Pure math primitives for derrick: CPMM, sizing, profit."
+version.workspace      = true
+edition.workspace      = true
+authors.workspace      = true
+license.workspace      = true
+publish.workspace      = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+primitive-types = { workspace = true }
+thiserror       = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

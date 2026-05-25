@@ -1,0 +1,113 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/math",
+    "crates/dex",
+    "crates/strategy",
+    "crates/chain",
+    "crates/risk",
+    "crates/ledger",
+    "crates/bot",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Danylo Novikov <d.novikov@kyrrex.com>"]
+license = "UNLICENSED"
+publish = false
+rust-version = "1.94"
+
+[workspace.dependencies]
+# Internal crates (paths added as crates are scaffolded)
+domain = { path = "crates/domain" }
+math = { path = "crates/math" }
+dex      = { path = "crates/dex" }
+strategy = { path = "crates/strategy" }
+chain    = { path = "crates/chain" }
+risk     = { path = "crates/risk" }
+ledger   = { path = "crates/ledger" }
+bot      = { path = "crates/bot" }
+
+# Async runtime / utilities
+tokio              = { version = "1.52", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
+tokio-tungstenite  = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+futures            = "0.3"
+async-trait        = "0.1"
+
+# HTTP
+reqwest            = { version = "0.13", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+url                = "2.5"
+
+# Starknet
+starknet            = "0.17"
+starknet-types-core = { version = "0.2", features = ["serde"] }
+
+# Serialization / config
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml       = "0.8"
+config     = { version = "0.15", default-features = false, features = ["toml"] }
+
+# Numerics
+primitive-types = { version = "0.14", features = ["serde"] }
+
+# Errors / logging / metrics
+thiserror                   = "2"
+anyhow                      = "1"
+tracing                     = "0.1"
+tracing-subscriber          = { version = "0.3", features = ["env-filter", "json"] }
+metrics                     = "0.24"
+metrics-exporter-prometheus = "0.18"
+
+# Storage / concurrency
+sqlx    = { version = "0.9", features = ["runtime-tokio", "tls-rustls-ring", "postgres", "macros", "uuid", "chrono", "bigdecimal", "migrate"] }
+dashmap = "6"
+
+# Graph (triangular arb)
+petgraph = "0.8"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Domain
+uuid   = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+
+# Dev
+proptest = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+pedantic                = { level = "warn", priority = -1 }
+unwrap_used             = "deny"
+panic                   = "deny"
+expect_used             = "warn"
+float_arithmetic        = "warn"
+module_name_repetitions = "allow"
+must_use_candidate      = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss          = "allow"
+cast_precision_loss     = "allow"
+similar_names           = "allow"
+return_self_not_must_use = "allow"
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"
+debug         = "line-tables-only"
+panic         = "abort"
+
+[profile.bench]
+inherits = "release"
+
+[profile.dev]
+opt-level = 1
+debug     = true

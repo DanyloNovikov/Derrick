@@ -1,0 +1,23 @@
+[package]
+name        = "strategy"
+description = "Opportunity detection and sizing for derrick: profit calculator, ternary search sizer."
+version.workspace      = true
+edition.workspace      = true
+authors.workspace      = true
+license.workspace      = true
+publish.workspace      = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+domain    = { workspace = true }
+math    = { workspace = true }
+primitive-types = { workspace = true }
+thiserror       = { workspace = true }
+tracing         = { workspace = true }
+
+[dev-dependencies]
+async-trait         = { workspace = true }
+starknet-types-core = { workspace = true }

@@ -1,0 +1,17 @@
+[package]
+name        = "risk"
+description = "Risk gating for derrick: token whitelist, position limits, circuit breakers, daily loss caps."
+version.workspace      = true
+edition.workspace      = true
+authors.workspace      = true
+license.workspace      = true
+publish.workspace      = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+domain = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }

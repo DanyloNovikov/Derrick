@@ -1,0 +1,71 @@
+# derrick — default config. Override fields via DERRICK__<SECTION>__<FIELD>
+# environment variables (e.g., DERRICK__DATABASE__URL).
+#
+# Secrets (private keys) are NEVER in config. They're read from environment:
+#   OPERATOR_PRIVATE_KEY=<hex>
+
+[network]
+rpc_url  = "http://localhost:9545"          # Pathfinder/Juno local node
+ws_url   = "ws://localhost:9545/ws"
+chain_id = "SN_MAIN"
+
+[database]
+url = "postgres://derrick:derrick@postgres:5432/derrick"
+
+[observability]
+log_level    = "info,derrick=debug"
+metrics_bind = "0.0.0.0:9090"
+
+[executor]
+# Placeholder addresses. Real values land after the Cairo contract is deployed.
+contract_address          = "0x0"
+operator_account_address  = "0x0"
+chain_id                  = "SN_MAIN"          # or "SN_SEPOLIA", or raw hex felt
+paper_trading             = false              # true = sim only, no signed submit
+
+[risk]
+max_consecutive_failures      = 5
+circuit_breaker_pause_seconds = 600
+
+[strategy]
+safety_margin_bps = 30
+sizer_iterations  = 40
+
+# Token registry. Each entry whitelists the token and optionally carries
+# per-token risk limits. Without limits, RiskManager rejects every proposal
+# touching this token (strict-mode, fail-closed).
+#
+# Example (USDC mainnet — substitute the real production address):
+#
+# [[tokens]]
+# symbol   = "USDC"
+# address  = "0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8"
+# decimals = 6
+# risk     = { max_position = "10000000000", min_profit = "1000000", daily_max_loss = "100000000" }
+#
+# [[tokens]]
+# symbol   = "ETH"
+# address  = "0x049d36570d4e46f48e99674bd3fcc8463d9c11baeac4d75ada3eaab2c1d28f6c"
+# decimals = 18
+# risk     = { max_position = "5000000000000000000", min_profit = "1000000000000000", daily_max_loss = "100000000000000000" }
+
+# Pool registrations. Empty = registry stays empty = detector idle.
+# Example for JediSwap v1 (substitute real mainnet addresses):
+#
+# [[pools]]
+# dex      = "jediswap_v1"
+# address  = "0x04d0390b777b424e43839cd1e744799f3de6c176c7e32c1812a41dbd9c19db6a"
+# token0   = "0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8"  # USDC
+# token1   = "0x049d36570d4e46f48e99674bd3fcc8463d9c11baeac4d75ada3eaab2c1d28f6c"  # ETH
+# fee_bps  = 30
+
+# Spatial-arb params. Without this section the detector runs in passive mode.
+# Example (decimal strings for raw token units):
+#
+# [spatial]
+# start_token        = "0x053c91253bc9682c04929ca02ed00b3e423f6710d2ee7e0d5ebb06f3ecf368a8"  # USDC
+# gas_cost           = "100000"                  # 0.1 USDC (6 decimals)
+# safety_margin_bps  = 30
+# min_amount_in      = "10000000"                # 10 USDC
+# max_amount_in      = "10000000000"             # 10000 USDC
+# sizer_iterations   = 40
