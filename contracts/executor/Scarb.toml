@@ -8,9 +8,7 @@ description = "Atomic arbitrage multicall executor with on-chain min_profit asse
 starknet = "2.16.0"
 
 [dev-dependencies]
-# snforge_std and the snforge binary are not yet wired into the dev container.
-# When you add them, `scarb test` will pick up `tests/test_executor.cairo`.
-# snforge_std = "0.50.0"
+snforge_std = "0.57.0"
 
 [lib]
 sierra = true
