@@ -2,11 +2,12 @@
 //!
 //! Wraps `starknet-rs`'s `SingleOwnerAccount` so the bot can build calldata
 //! via [`ExecutorClient::build_execute_calldata`] and submit a single signed
-//! `invoke_v3` to the `ArbExecutor` contract.
+//! `invoke_v3` to the `DerrickExecutor` contract.
 //!
 //! Private keys never leave the submitter struct. The constructor takes a
-//! `Felt` (parsed from the `OPERATOR_PRIVATE_KEY` env var upstream); the
-//! struct never serializes itself, and `Debug` redacts the key.
+//! `Felt` (parsed from the `OWNER_PRIVATE_KEY` env var upstream — the
+//! "Oracle wallet" in operations docs); the struct never serializes itself,
+//! and `Debug` redacts the key.
 
 use primitive_types::U256;
 use starknet::accounts::{Account, ExecutionEncoding, SingleOwnerAccount};
@@ -20,11 +21,12 @@ use crate::error::ChainError;
 use crate::executor::{ExecutorCall, ExecutorClient};
 use crate::selectors::EXECUTE_SELECTOR;
 
-/// Submits signed `invoke_v3` transactions to the `ArbExecutor` contract.
+/// Submits signed `invoke_v3` transactions to the `DerrickExecutor` contract.
 ///
-/// One submitter binds one operator key + one executor contract. Multiple
-/// submitters can coexist if you want to spread load across operator
-/// accounts; nothing here serializes their state.
+/// One submitter binds one owner key + one executor contract. The executor
+/// contract gates `execute()` on `caller == owner`, so this key must
+/// correspond to the same address that owns the contract on-chain (the
+/// "Oracle wallet").
 pub struct ExecutorSubmitter {
     client: ExecutorClient,
     account: SingleOwnerAccount<JsonRpcClient<HttpTransport>, LocalWallet>,
@@ -33,13 +35,13 @@ pub struct ExecutorSubmitter {
 impl ExecutorSubmitter {
     /// Build a submitter from raw fields.
     ///
-    /// `operator_private_key` is consumed once and lives only inside the
+    /// `owner_private_key` is consumed once and lives only inside the
     /// signer thereafter. Caller is expected to read it from the
-    /// `OPERATOR_PRIVATE_KEY` env var and parse to `Felt::from_hex`.
+    /// `OWNER_PRIVATE_KEY` env var and parse to `Felt::from_hex`.
     pub fn new(
         rpc_url: &str,
-        operator_address: Felt,
-        operator_private_key: Felt,
+        owner_address: Felt,
+        owner_private_key: Felt,
         executor_address: Felt,
         chain_id: Felt,
     ) -> Result<Self, ChainError> {
@@ -47,11 +49,11 @@ impl ExecutorSubmitter {
             .map_err(|e| ChainError::Rpc(format!("invalid RPC URL '{rpc_url}': {e}")))?;
         let provider = JsonRpcClient::new(HttpTransport::new(url));
         let signer =
-            LocalWallet::from_signing_key(SigningKey::from_secret_scalar(operator_private_key));
+            LocalWallet::from_signing_key(SigningKey::from_secret_scalar(owner_private_key));
         let account = SingleOwnerAccount::new(
             provider,
             signer,
-            operator_address,
+            owner_address,
             chain_id,
             ExecutionEncoding::New,
         );
@@ -65,7 +67,7 @@ impl ExecutorSubmitter {
         self.client.executor_address()
     }
 
-    pub fn operator_address(&self) -> Felt {
+    pub fn owner_address(&self) -> Felt {
         self.account.address()
     }
 
@@ -76,12 +78,12 @@ impl ExecutorSubmitter {
         &self.client
     }
 
-    /// Build calldata for `ArbExecutor::execute`, sign + submit as
+    /// Build calldata for `DerrickExecutor::execute`, sign + submit as
     /// `invoke_v3`. Returns the transaction hash. Does NOT wait for inclusion.
     ///
     /// The bot's pipeline should follow this with a simulation pre-check
     /// (`crate::simulator::simulate_execute`) and a post-submit watcher on
-    /// the tx hash before recording success/revert in the ledger.
+    /// the tx hash to record success/revert via the risk manager.
     pub async fn submit(
         &self,
         token_in: Felt,
@@ -112,7 +114,7 @@ impl std::fmt::Debug for ExecutorSubmitter {
                 "executor",
                 &format_args!("{:#x}", self.client.executor_address()),
             )
-            .field("operator", &format_args!("{:#x}", self.account.address()))
+            .field("owner", &format_args!("{:#x}", self.account.address()))
             .finish_non_exhaustive()
     }
 }
@@ -139,7 +141,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(s.executor_address(), Felt::from(0xbbbb_u64));
-        assert_eq!(s.operator_address(), Felt::from(0xaaaa_u64));
+        assert_eq!(s.owner_address(), Felt::from(0xaaaa_u64));
     }
 
     #[test]
@@ -168,7 +170,7 @@ mod tests {
         assert!(debug.contains("ExecutorSubmitter"));
         assert!(
             debug.contains("0xaaaa"),
-            "operator address should appear: {debug}"
+            "owner address should appear: {debug}"
         );
         assert!(
             debug.contains("0xbbbb"),

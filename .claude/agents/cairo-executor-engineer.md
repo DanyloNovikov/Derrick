@@ -20,7 +20,7 @@ This check is the last line of defense. If the off-chain simulator was wrong, on
 
 ```cairo
 #[starknet::interface]
-trait IArbExecutor<TContractState> {
+trait IDerrickExecutor<TContractState> {
     fn execute(
         ref self: TContractState,
         token_in: ContractAddress,
@@ -42,8 +42,8 @@ trait IArbExecutor<TContractState> {
 
 ## Security
 
-- `execute` is callable only by a whitelist of addresses (operator-bot). Without that, anyone could drain the balance via arbitrary `Call`s — owner-level reentrancy.
-- Every `Call` is validated: `to ∈ whitelisted DEX addresses`, `selector ∈ whitelisted selectors` (`swap`, `multihop_swap`, `transfer` on known routers). This protects you when the operator key is compromised and tries to call an arbitrary contract.
+- `execute` is callable only by the contract's `owner` — the "Oracle wallet" that deployed it. There is no separate operator role; ownership and execution privilege are one and the same. Without this gate, anyone could drain the balance via arbitrary `Call`s.
+- Every `Call` is validated: `to ∈ whitelisted DEX addresses`, `selector ∈ whitelisted selectors` (`swap`, `multihop_swap`, `transfer` on known routers). This is the second line of defence — protects you when the owner key is compromised and tries to call an arbitrary contract.
 - OpenZeppelin `Pausable` — `pause()` stops `execute` immediately.
 - `ReentrancyGuard` on `execute`.
 

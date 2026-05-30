@@ -183,18 +183,22 @@ pub fn parse_chain_id(s: &str) -> Result<Felt> {
     }
 }
 
-/// Build an [`ExecutorSubmitter`] if (a) `OPERATOR_PRIVATE_KEY` env var is
+/// Build an [`ExecutorSubmitter`] if (a) `OWNER_PRIVATE_KEY` env var is
 /// set, (b) executor contract address is not the placeholder `0x0`, and
 /// (c) all hex values parse. Returns `Ok(None)` (with a warn) when any
 /// precondition fails — the bot continues without a submitter.
+///
+/// `OWNER_PRIVATE_KEY` is the private key of the Oracle wallet — the same
+/// wallet that owns the on-chain `DerrickExecutor` contract (the only address
+/// the contract's `execute()` accepts as caller).
 pub fn build_submitter(
     rpc_url: &str,
     contract_address: &str,
-    operator_address: &str,
+    owner_address: &str,
     chain_id: &str,
 ) -> Result<Option<ExecutorSubmitter>> {
-    let Ok(private_key_hex) = std::env::var("OPERATOR_PRIVATE_KEY") else {
-        warn!("OPERATOR_PRIVATE_KEY not set; submitter disabled");
+    let Ok(private_key_hex) = std::env::var("OWNER_PRIVATE_KEY") else {
+        warn!("OWNER_PRIVATE_KEY not set; submitter disabled");
         return Ok(None);
     };
     if contract_address == "0x0" || contract_address.is_empty() {
@@ -203,12 +207,12 @@ pub fn build_submitter(
     }
     let executor_addr =
         Felt::from_hex(contract_address).map_err(|e| anyhow!("executor.contract_address: {e}"))?;
-    let operator_addr = Felt::from_hex(operator_address)
-        .map_err(|e| anyhow!("executor.operator_account_address: {e}"))?;
+    let owner_addr = Felt::from_hex(owner_address)
+        .map_err(|e| anyhow!("executor.owner_account_address: {e}"))?;
     let private_key = Felt::from_hex(&private_key_hex)
-        .map_err(|_| anyhow!("OPERATOR_PRIVATE_KEY is not a valid hex felt"))?;
+        .map_err(|_| anyhow!("OWNER_PRIVATE_KEY is not a valid hex felt"))?;
     let chain = parse_chain_id(chain_id)?;
-    let s = ExecutorSubmitter::new(rpc_url, operator_addr, private_key, executor_addr, chain)?;
+    let s = ExecutorSubmitter::new(rpc_url, owner_addr, private_key, executor_addr, chain)?;
     Ok(Some(s))
 }
 
@@ -499,14 +503,13 @@ mod tests {
                 ws_url: None,
                 chain_id: "SN_MAIN".into(),
             },
-            database: crate::config::DatabaseConfig { url: "x".into() },
             observability: crate::config::ObservabilityConfig {
                 log_level: "info".into(),
                 metrics_bind: "127.0.0.1:9090".into(),
             },
             executor: crate::config::ExecutorConfig {
                 contract_address: "0x0".into(),
-                operator_account_address: "0x0".into(),
+                owner_account_address: "0x0".into(),
                 chain_id: "SN_MAIN".into(),
                 paper_trading: false,
             },

@@ -8,9 +8,9 @@
 //!   and forwards a [`PoolStateUpdate`] downstream.
 //! * `detector` — on each state update, snapshots all pools that share the
 //!   updated pool's token pair, runs `detect_spatial_opportunities`, then for
-//!   each candidate inserts an `attempts` row, evaluates risk gating, and
-//!   updates the row's status. Simulation + submission are wired only when
-//!   `provider`/`submitter` are present (full sim+submit flow is Step 10.2).
+//!   each candidate evaluates risk gating, simulates, and (optionally) submits.
+//!   Simulation + submission are wired only when `provider`/`submitter` are
+//!   present.
 //!
 //! Each spawned task `select!`s on a shutdown signal so the main loop can
 //! cooperatively terminate everything.
@@ -21,11 +21,8 @@ use std::time::Duration;
 
 use chain::{
     simulate_execute, ChainError, ExecutorSubmitter, RpcProvider, WatcherConfig, WsWatcher,
-    EXECUTED_EVENT_SELECTOR,
 };
-use chrono::Utc;
 use domain::{Pool, PoolEvent, PoolId, PoolMeta};
-use ledger::{AttemptRecord, AttemptStatus, AttemptStatusUpdate, Ledger};
 use metrics::{counter, histogram};
 use risk::{RiskManager, SystemClock, TradeOutcome, TradeProposal};
 use strategy::{detect_spatial_opportunities, SizedTrade, SpatialParams};
@@ -47,6 +44,17 @@ const INCLUSION_CAPACITY: usize = 128;
 const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(5);
 const DEFAULT_MAX_WAIT: Duration = Duration::from_secs(300);
 
+/// Stable string codes used as Prometheus label values for
+/// `derrick_attempts_total{status=...}`. Kept centralized so the cardinality
+/// is bounded and the dashboard queries don't break on typos.
+mod attempt_status {
+    pub const SIZED: &str = "sized";
+    pub const RISK_REJECTED: &str = "risk_rejected";
+    pub const SIMULATION_FAILED: &str = "simulation_failed";
+    pub const SUBMITTED: &str = "submitted";
+    pub const PAPER_TRADED: &str = "paper_traded";
+}
+
 /// Notification emitted by the state updater once a pool has been mutated.
 #[derive(Debug, Clone, Copy)]
 pub struct PoolStateUpdate {
@@ -59,7 +67,6 @@ pub struct PoolStateUpdate {
 pub struct PipelineConfig {
     pub registry: Arc<PoolRegistry>,
     pub risk: Arc<RiskManager<SystemClock>>,
-    pub ledger: Ledger,
     pub watcher_config: Option<WatcherConfig>,
     pub provider: Option<RpcProvider>,
     pub submitter: Option<ExecutorSubmitter>,
@@ -67,7 +74,7 @@ pub struct PipelineConfig {
     /// (logs updates without acting). Some(...) activates the full flow.
     pub spatial: Option<SpatialParams>,
     /// If true, sim runs as usual but submit is suppressed — the attempt is
-    /// recorded as `PaperTraded`. Useful for shadow-running pre-launch.
+    /// logged as `paper_traded`. Useful for shadow-running pre-launch.
     pub paper_trading: bool,
 }
 
@@ -92,21 +99,17 @@ pub fn spawn(cfg: PipelineConfig, shutdown: ShutdownToken) -> PipelineHandles {
         shutdown.clone(),
     );
 
-    // Inclusion: real watcher if we have both a provider and a submitter
-    // (submitter gives us the executor address to filter events against);
+    // Inclusion: real watcher if we have both a provider and a submitter;
     // otherwise a stub that drains the channel.
     let inclusion = match (cfg.provider.as_ref(), cfg.submitter.as_ref()) {
-        (Some(provider), Some(submitter)) => {
+        (Some(provider), Some(_)) => {
             let inc_cfg = InclusionConfig {
                 poll_interval: DEFAULT_POLL_INTERVAL,
                 max_wait: DEFAULT_MAX_WAIT,
-                executor_address: submitter.executor_address(),
-                executed_event_selector: EXECUTED_EVENT_SELECTOR,
             };
             spawn_inclusion(
                 inc_cfg,
                 std::sync::Arc::new(provider.clone()),
-                cfg.ledger.clone(),
                 cfg.risk.clone(),
                 inclusion_rx,
                 shutdown.clone(),
@@ -118,7 +121,6 @@ pub fn spawn(cfg: PipelineConfig, shutdown: ShutdownToken) -> PipelineHandles {
     let detector = spawn_detector(
         cfg.registry,
         cfg.risk,
-        cfg.ledger,
         cfg.provider,
         cfg.submitter,
         cfg.spatial,
@@ -217,7 +219,6 @@ fn spawn_state_updater(
 fn spawn_detector(
     registry: Arc<PoolRegistry>,
     risk: Arc<RiskManager<SystemClock>>,
-    ledger: Ledger,
     provider: Option<RpcProvider>,
     submitter: Option<ExecutorSubmitter>,
     spatial: Option<SpatialParams>,
@@ -259,7 +260,6 @@ fn spawn_detector(
                             update,
                             &registry,
                             &risk,
-                            &ledger,
                             provider.as_ref(),
                             submitter.as_ref(),
                             paper_trading,
@@ -276,13 +276,12 @@ fn spawn_detector(
 }
 
 /// Handle one `PoolStateUpdate`: find candidate spatial arbitrages and gate
-/// them through risk → simulation → submission → ledger.
+/// them through risk → simulation → submission.
 #[allow(clippy::too_many_arguments)]
 async fn handle_update(
     update: PoolStateUpdate,
     registry: &PoolRegistry,
     risk: &RiskManager<SystemClock>,
-    ledger: &Ledger,
     provider: Option<&RpcProvider>,
     submitter: Option<&ExecutorSubmitter>,
     paper_trading: bool,
@@ -342,7 +341,6 @@ async fn handle_update(
             sized,
             metas,
             risk,
-            ledger,
             provider,
             submitter,
             paper_trading,
@@ -354,48 +352,29 @@ async fn handle_update(
     histogram!("derrick_handle_update_duration_seconds").record(started.elapsed().as_secs_f64());
 }
 
-/// Persist + gate one sized trade through the full pipeline:
-///   ledger insert → risk → (sim → submit) → inclusion enqueue.
+/// Gate one sized trade through the full pipeline:
+///   risk → (sim → submit) → inclusion enqueue.
 ///
 /// When `paper_trading` is true, simulation still runs but submit is
-/// suppressed and the attempt is recorded as `PaperTraded`.
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+/// suppressed and the attempt is logged as `paper_traded`.
+#[allow(clippy::too_many_arguments)]
 async fn process_sized(
     sized: SizedTrade,
     pool_metas: Vec<PoolMeta>,
     risk: &RiskManager<SystemClock>,
-    ledger: &Ledger,
     provider: Option<&RpcProvider>,
     submitter: Option<&ExecutorSubmitter>,
     paper_trading: bool,
     inclusion_tx: &mpsc::Sender<PendingTx>,
 ) {
+    // Correlation id — threaded through every log line on this attempt so
+    // operators can grep one attempt across detector/inclusion logs.
     let id = Uuid::new_v4();
-    let token_addr_hex = format!("{:#x}", sized.amount_in.token.as_felt());
-    let path_json = serde_json::to_value(sized.outcome.path.clone()).unwrap_or_default();
 
     let expected_gross = sized.outcome.gross.abs();
     let min_profit = sized.outcome.net.abs();
 
-    let rec = AttemptRecord {
-        id,
-        detected_at: Utc::now(),
-        completed_at: None,
-        status: AttemptStatus::Sized,
-        token_in_addr: token_addr_hex.clone(),
-        amount_in: sized.amount_in.raw,
-        expected_profit: Some(min_profit),
-        realized_profit: None,
-        gas_paid: None,
-        reason: None,
-        path_json,
-        tx_hash: None,
-    };
-    if let Err(e) = ledger.insert_attempt(&rec).await {
-        warn!(error = %e, ?id, "ledger insert_attempt failed");
-        return;
-    }
-    counter!("derrick_attempts_total", "status" => AttemptStatus::Sized.as_str()).increment(1);
+    counter!("derrick_attempts_total", "status" => attempt_status::SIZED).increment(1);
 
     let prop = TradeProposal {
         token_in: sized.amount_in.token,
@@ -403,16 +382,8 @@ async fn process_sized(
         expected_profit: sized.outcome.net,
     };
     if let Err(rejection) = risk.evaluate(&prop) {
-        counter!("derrick_attempts_total", "status" => AttemptStatus::RiskRejected.as_str())
-            .increment(1);
-        let upd = AttemptStatusUpdate {
-            completed_at: Some(Utc::now()),
-            reason: Some(format!("{rejection}")),
-            ..Default::default()
-        };
-        let _ = ledger
-            .update_attempt_status(id, AttemptStatus::RiskRejected, upd)
-            .await;
+        counter!("derrick_attempts_total", "status" => attempt_status::RISK_REJECTED).increment(1);
+        info!(?id, reason = %rejection, "risk rejected");
         return;
     }
 
@@ -430,14 +401,6 @@ async fn process_sized(
         Ok(c) => c,
         Err(e) => {
             warn!(error = %e, ?id, "build_path_calls failed");
-            let upd = AttemptStatusUpdate {
-                completed_at: Some(Utc::now()),
-                reason: Some(format!("build_path_calls: {e}")),
-                ..Default::default()
-            };
-            let _ = ledger
-                .update_attempt_status(id, AttemptStatus::SimulationFailed, upd)
-                .await;
             return;
         }
     };
@@ -468,38 +431,21 @@ async fn process_sized(
         Err(e) => {
             counter!(
                 "derrick_attempts_total",
-                "status" => AttemptStatus::SimulationFailed.as_str(),
+                "status" => attempt_status::SIMULATION_FAILED,
             )
             .increment(1);
             warn!(error = %e, ?id, "simulation failed");
             risk.record(TradeOutcome::SkippedSimulation {
                 token: sized.amount_in.token,
             });
-            let upd = AttemptStatusUpdate {
-                completed_at: Some(Utc::now()),
-                reason: Some(format!("{e}")),
-                ..Default::default()
-            };
-            let _ = ledger
-                .update_attempt_status(id, AttemptStatus::SimulationFailed, upd)
-                .await;
             return;
         }
     }
 
     // Paper-trading: simulation passed, stop here. Don't sign anything.
     if paper_trading {
-        counter!("derrick_attempts_total", "status" => AttemptStatus::PaperTraded.as_str())
-            .increment(1);
+        counter!("derrick_attempts_total", "status" => attempt_status::PAPER_TRADED).increment(1);
         info!(?id, "paper-trading mode — skipping on-chain submit");
-        let upd = AttemptStatusUpdate {
-            completed_at: Some(Utc::now()),
-            reason: Some("paper_trading=true".into()),
-            ..Default::default()
-        };
-        let _ = ledger
-            .update_attempt_status(id, AttemptStatus::PaperTraded, upd)
-            .await;
         return;
     }
 
@@ -510,16 +456,8 @@ async fn process_sized(
     histogram!("derrick_submit_duration_seconds").record(submit_started.elapsed().as_secs_f64());
     match submit_result {
         Ok(tx_hash) => {
-            counter!("derrick_attempts_total", "status" => AttemptStatus::Submitted.as_str())
-                .increment(1);
+            counter!("derrick_attempts_total", "status" => attempt_status::SUBMITTED).increment(1);
             info!(?id, tx_hash = %format!("{tx_hash:#x}"), "submitted");
-            let upd = AttemptStatusUpdate {
-                tx_hash: Some(format!("{tx_hash:#x}")),
-                ..Default::default()
-            };
-            let _ = ledger
-                .update_attempt_status(id, AttemptStatus::Submitted, upd)
-                .await;
             let pending = PendingTx {
                 attempt_id: id,
                 tx_hash,
@@ -533,7 +471,7 @@ async fn process_sized(
         Err(e) => {
             counter!(
                 "derrick_attempts_total",
-                "status" => AttemptStatus::SimulationFailed.as_str(),
+                "status" => attempt_status::SIMULATION_FAILED,
             )
             .increment(1);
             warn!(error = %e, ?id, "submit failed");
@@ -541,9 +479,8 @@ async fn process_sized(
                 ChainError::Reverted(_) => {
                     risk.record(TradeOutcome::Reverted {
                         token: sized.amount_in.token,
-                        // Step 10.2 doesn't yet receive a gas_paid estimate
-                        // from `submit`; record zero pending the inclusion-
-                        // watcher that reads the receipt.
+                        // No inclusion receipt yet — record zero gas. The
+                        // inclusion-watcher path records the real fee.
                         gas_paid: domain::U256::zero(),
                     });
                 }
@@ -553,14 +490,6 @@ async fn process_sized(
                     });
                 }
             }
-            let upd = AttemptStatusUpdate {
-                completed_at: Some(Utc::now()),
-                reason: Some(format!("{e}")),
-                ..Default::default()
-            };
-            let _ = ledger
-                .update_attempt_status(id, AttemptStatus::SimulationFailed, upd)
-                .await;
         }
     }
 }
@@ -584,17 +513,12 @@ mod tests {
         Arc::new(RiskManager::new(cfg, SystemClock))
     }
 
-    fn lazy_ledger() -> Ledger {
-        Ledger::lazy("postgres://nobody@127.0.0.1:5432/derrick_test").unwrap()
-    }
-
     #[tokio::test]
     async fn pipeline_tasks_exit_on_shutdown() {
         let shutdown = Shutdown::new();
         let cfg = PipelineConfig {
             registry: Arc::new(PoolRegistry::new()),
             risk: dummy_risk(),
-            ledger: lazy_ledger(),
             watcher_config: None,
             provider: None,
             submitter: None,

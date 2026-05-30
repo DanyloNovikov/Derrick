@@ -45,7 +45,7 @@ pub enum BuildError {
 /// from the registry guards before dropping the read locks.
 ///
 /// `executor_address` is the destination for the FINAL hop's output (the
-/// `ArbExecutor`'s own address — so the post-swap balance increase shows up
+/// `DerrickExecutor`'s own address — so the post-swap balance increase shows up
 /// against `executor.balance_of(self)`).
 pub fn build_path_calls(
     sized: &SizedTrade,

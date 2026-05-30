@@ -1,14 +1,17 @@
-.PHONY: help build up down psql shell check fmt fmt-check clippy test
+.PHONY: help build image down shell check fmt fmt-check clippy test
 
 DC  := docker compose
 DEV := $(DC) --profile dev run --rm dev
 
+# Tag for the production runtime image. Override on the command line:
+#   make image IMAGE_TAG=derrick:0.1.0
+IMAGE_TAG ?= derrick:latest
+
 help:
 	@echo "Targets:"
-	@echo "  make build       - build the dev container image"
-	@echo "  make up          - start postgres in background"
+	@echo "  make build       - build the dev container image (target=dev)"
+	@echo "  make image       - build the production image (target=runtime, tag $$IMAGE_TAG)"
 	@echo "  make down        - stop and remove all containers"
-	@echo "  make psql        - open psql in the postgres container"
 	@echo "  make shell       - open bash inside the dev container"
 	@echo "  make check       - cargo check --workspace --all-targets"
 	@echo "  make fmt         - cargo fmt --all"
@@ -19,14 +22,13 @@ help:
 build:
 	$(DC) --profile dev build dev
 
-up:
-	$(DC) up -d postgres
+# Production image — same Dockerfile, same toolchain stage as `dev`, but the
+# `runtime` target strips everything except the compiled binary.
+image:
+	DOCKER_BUILDKIT=1 docker build --target runtime -t $(IMAGE_TAG) .
 
 down:
 	$(DC) down
-
-psql:
-	$(DC) exec postgres psql -U derrick -d derrick
 
 shell:
 	$(DEV) bash
@@ -54,3 +56,19 @@ cairo-clean:
 
 shell-cairo:
 	$(DEV) bash -c "cd contracts/executor && bash"
+
+# ─── admin CLI ───────────────────────────────────────────────────────────
+# Quick wrappers around `derrick-admin` for common ops. Honour env
+# OWNER_PRIVATE_KEY + DERRICK__* the same way the bot does.
+
+admin-build:
+	$(DEV) cargo build -p admin-cli --release
+
+admin-status:
+	$(DEV) cargo run -q -p admin-cli -- status
+
+admin-setup:
+	$(DEV) cargo run -q -p admin-cli -- setup
+
+admin-setup-dry:
+	$(DEV) cargo run -q -p admin-cli -- setup --dry-run

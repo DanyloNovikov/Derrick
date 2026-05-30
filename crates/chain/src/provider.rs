@@ -54,7 +54,7 @@ pub enum TxStatus {
         events: Vec<EventLog>,
     },
     /// Included but reverted on-chain. `reason` is the node-reported revert
-    /// message; `actual_fee` is still owed by the operator.
+    /// message; `actual_fee` is still owed by the owner (Oracle wallet).
     Reverted { reason: String, actual_fee: U256 },
 }
 
@@ -63,7 +63,8 @@ pub trait Provider: Send + Sync {
     /// Read-only call. Used for `quote_in_onchain` and pre-submit simulation.
     async fn call(&self, call: ProviderCall, block: BlockTarget) -> Result<Vec<Felt>, ChainError>;
 
-    /// Current nonce for the operator account.
+    /// Current nonce for the given account (typically the owner / Oracle
+    /// wallet, but the trait makes no assumptions).
     async fn get_nonce(&self, account: Felt, block: BlockTarget) -> Result<Felt, ChainError>;
 
     /// Poll the status of a submitted transaction.

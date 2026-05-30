@@ -11,7 +11,6 @@ use bot::{
     shutdown::Shutdown,
     wiring,
 };
-use ledger::Ledger;
 use risk::{RiskManager, SystemClock};
 
 #[derive(Parser, Debug)]
@@ -40,15 +39,6 @@ async fn main() -> anyhow::Result<()> {
         config = cli.config,
         "derrick starting"
     );
-
-    let ledger = Ledger::connect(&cfg.database.url)
-        .await
-        .with_context(|| format!("connect to {}", cfg.database.url))?;
-    ledger
-        .run_migrations()
-        .await
-        .context("apply ledger migrations")?;
-    info!("ledger connected and migrated");
 
     // Pool registry — populated from [[pools]] config entries.
     let registry = Arc::new(PoolRegistry::new());
@@ -85,11 +75,11 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    // Submitter — requires OPERATOR_PRIVATE_KEY env + non-placeholder addrs.
+    // Submitter — requires OWNER_PRIVATE_KEY env + non-placeholder addrs.
     let submitter = match wiring::build_submitter(
         &cfg.network.rpc_url,
         &cfg.executor.contract_address,
-        &cfg.executor.operator_account_address,
+        &cfg.executor.owner_account_address,
         &cfg.executor.chain_id,
     ) {
         Ok(s) => s,
@@ -125,7 +115,6 @@ async fn main() -> anyhow::Result<()> {
     let pipeline_config = PipelineConfig {
         registry,
         risk,
-        ledger,
         watcher_config,
         provider,
         submitter,

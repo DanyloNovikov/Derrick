@@ -7,7 +7,7 @@
 use starknet::macros::selector;
 use starknet_types_core::felt::Felt;
 
-/// Selector for `ArbExecutor::execute(token_in, min_profit, calls)`.
+/// Selector for `DerrickExecutor::execute(token_in, min_profit, calls)`.
 pub const EXECUTE_SELECTOR: Felt = selector!("execute");
 
 /// Selector for `IERC20::balance_of(account)`.
@@ -22,11 +22,6 @@ pub const APPROVE_SELECTOR: Felt = selector!("approve");
 /// Selector for `JediSwapV1Pair::swap(amount0_out, amount1_out, to, data)`.
 /// Uniswap v2 swap convention; reused by `JediSwap` v1 / `MySwap` v1 / 10kSwap.
 pub const SWAP_SELECTOR: Felt = selector!("swap");
-
-/// Selector for the `Executed` event emitted by `ArbExecutor::execute`.
-/// Used by the inclusion watcher to filter events when computing realized
-/// profit from a transaction receipt.
-pub const EXECUTED_EVENT_SELECTOR: Felt = selector!("Executed");
 
 #[cfg(test)]
 mod tests {

@@ -122,7 +122,7 @@ use starknet::account::Call;
 /// External interface of the arbitrage executor. Every method is owner-gated
 /// except the two read-only views (`is_target_allowed`, `owner`).
 #[starknet::interface]
-pub trait IArbExecutor<TContractState> {
+pub trait IDerrickExecutor<TContractState> {
     /// Execute `calls` atomically and assert the contract's `token_in` balance
     /// grew by at least `min_profit`.
     ///
@@ -198,7 +198,7 @@ trait IERC20<TContractState> {
 }
 
 #[starknet::contract]
-mod ArbExecutor {
+mod DerrickExecutor {
     use core::num::traits::Zero;
     use starknet::storage::{
         Map,
@@ -252,8 +252,8 @@ mod ArbExecutor {
     }
 
     #[abi(embed_v0)]
-    impl ArbExecutorImpl of super::IArbExecutor<ContractState> {
-        /// See `IArbExecutor::execute`. Steps mirror the module-level flow.
+    impl DerrickExecutorImpl of super::IDerrickExecutor<ContractState> {
+        /// See `IDerrickExecutor::execute`. Steps mirror the module-level flow.
         fn execute(
             ref self: ContractState,
             token_in: ContractAddress,
@@ -305,27 +305,27 @@ mod ArbExecutor {
             profit
         }
 
-        /// See `IArbExecutor::allow_target`.
+        /// See `IDerrickExecutor::allow_target`.
         fn allow_target(ref self: ContractState, target: ContractAddress, selector: felt252) {
             self.assert_owner();
             assert(!target.is_zero(), 'TARGET_ZERO');
             self.allowed_targets.write((target, selector), true);
         }
 
-        /// See `IArbExecutor::disallow_target`.
+        /// See `IDerrickExecutor::disallow_target`.
         fn disallow_target(ref self: ContractState, target: ContractAddress, selector: felt252) {
             self.assert_owner();
             self.allowed_targets.write((target, selector), false);
         }
 
-        /// See `IArbExecutor::is_target_allowed`.
+        /// See `IDerrickExecutor::is_target_allowed`.
         fn is_target_allowed(
             self: @ContractState, target: ContractAddress, selector: felt252,
         ) -> bool {
             self.allowed_targets.read((target, selector))
         }
 
-        /// See `IArbExecutor::transfer_ownership`. Single-step on purpose;
+        /// See `IDerrickExecutor::transfer_ownership`. Single-step on purpose;
         /// guard the address carefully.
         fn transfer_ownership(ref self: ContractState, new_owner: ContractAddress) {
             self.assert_owner();
@@ -333,12 +333,12 @@ mod ArbExecutor {
             self.owner.write(new_owner);
         }
 
-        /// See `IArbExecutor::owner`.
+        /// See `IDerrickExecutor::owner`.
         fn owner(self: @ContractState) -> ContractAddress {
             self.owner.read()
         }
 
-        /// See `IArbExecutor::withdraw`.
+        /// See `IDerrickExecutor::withdraw`.
         fn withdraw(
             ref self: ContractState,
             token: ContractAddress,

@@ -3,7 +3,7 @@
 //! Sources, in order of precedence (later overrides earlier):
 //!   1. The TOML file passed on the CLI (default: `config/default.toml`).
 //!   2. Environment variables prefixed `DERRICK__` with `__` as the level
-//!      separator (e.g., `DERRICK__DATABASE__URL`).
+//!      separator (e.g., `DERRICK__NETWORK__RPC_URL`).
 
 use serde::Deserialize;
 use thiserror::Error;
@@ -11,7 +11,6 @@ use thiserror::Error;
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
     pub network: NetworkConfig,
-    pub database: DatabaseConfig,
     pub observability: ObservabilityConfig,
     pub executor: ExecutorConfig,
     pub risk: RiskConfig,
@@ -39,11 +38,6 @@ pub struct NetworkConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct DatabaseConfig {
-    pub url: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
 pub struct ObservabilityConfig {
     /// Env-filter directive for `tracing-subscriber` (e.g.,
     /// `info,derrick=debug`).
@@ -54,11 +48,13 @@ pub struct ObservabilityConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExecutorConfig {
-    /// Address of the on-chain `ArbExecutor` contract.
+    /// Address of the on-chain `DerrickExecutor` contract.
     pub contract_address: String,
-    /// Operator account address. The private key is read from the
-    /// `OPERATOR_PRIVATE_KEY` env var, never from config.
-    pub operator_account_address: String,
+    /// Owner account address — the only address the contract's `execute()`
+    /// accepts as caller. Operationally this is the "Oracle wallet" that
+    /// also deploys the contract and moves funds in/out. The private key is
+    /// read from the `OWNER_PRIVATE_KEY` env var, never from config.
+    pub owner_account_address: String,
     /// Chain id: `"SN_MAIN"`, `"SN_SEPOLIA"`, or a raw hex felt.
     #[serde(default = "default_chain_id")]
     pub chain_id: String,
@@ -185,16 +181,13 @@ rpc_url = "https://example/rpc"
 ws_url = "wss://example/ws"
 chain_id = "SN_MAIN"
 
-[database]
-url = "postgres://x"
-
 [observability]
 log_level = "info,derrick=debug"
 metrics_bind = "127.0.0.1:9090"
 
 [executor]
 contract_address = "0xdead"
-operator_account_address = "0xbeef"
+owner_account_address = "0xbeef"
 
 [risk]
 max_consecutive_failures = 5
@@ -211,11 +204,10 @@ sizer_iterations = 40
         assert_eq!(cfg.network.rpc_url, "https://example/rpc");
         assert_eq!(cfg.network.ws_url.as_deref(), Some("wss://example/ws"));
         assert_eq!(cfg.network.chain_id, "SN_MAIN");
-        assert_eq!(cfg.database.url, "postgres://x");
         assert_eq!(cfg.observability.log_level, "info,derrick=debug");
         assert_eq!(cfg.observability.metrics_bind, "127.0.0.1:9090");
         assert_eq!(cfg.executor.contract_address, "0xdead");
-        assert_eq!(cfg.executor.operator_account_address, "0xbeef");
+        assert_eq!(cfg.executor.owner_account_address, "0xbeef");
         assert_eq!(cfg.risk.max_consecutive_failures, 5);
         assert_eq!(cfg.risk.circuit_breaker_pause_seconds, 600);
         assert_eq!(cfg.strategy.safety_margin_bps, 30);
@@ -226,16 +218,13 @@ sizer_iterations = 40
     fn rejects_missing_required_field() {
         // [network] block missing → load fails
         let body = r#"
-[database]
-url = "x"
-
 [observability]
 log_level = "info"
 metrics_bind = "127.0.0.1:9090"
 
 [executor]
 contract_address = "0xdead"
-operator_account_address = "0xbeef"
+owner_account_address = "0xbeef"
 
 [risk]
 max_consecutive_failures = 5

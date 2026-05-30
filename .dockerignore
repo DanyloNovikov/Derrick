@@ -1,0 +1,31 @@
+# Keep the build context small. Anything not needed by `cargo build -p bot`
+# or by the runtime image should go here — it speeds up every `docker build`.
+
+# Rust build artifacts (caches are mounted at build time instead).
+target/
+
+# VCS / IDE / OS detritus.
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+
+# Local environment + secrets — runtime concerns, never image concerns.
+.env
+.env.example
+
+# Claude / agent metadata.
+.claude/
+
+# Documentation: not needed inside the image; let `docker build` skip it.
+*.md
+docs/
+
+# Compose config — irrelevant to the image itself.
+docker-compose.yml
+Makefile
+
+# Cairo project — separate concern, not built into the bot binary. If/when we
+# add a Cairo-build target, drop this exclusion.
+contracts/

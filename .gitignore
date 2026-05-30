@@ -7,3 +7,4 @@
 .idea/
 .vscode/
 contracts/executor/target/
+contracts/executor/.snfoundry_cache

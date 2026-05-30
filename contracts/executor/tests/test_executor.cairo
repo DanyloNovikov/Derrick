@@ -1,4 +1,4 @@
-//! Exhaustive snforge test suite for `ArbExecutor`.
+//! Exhaustive snforge test suite for `DerrickExecutor`.
 //!
 //! Instead of `mock_call`, this suite deploys real mock contracts so the profit
 //! accounting is exercised end-to-end against actual ERC20 storage:
@@ -28,7 +28,7 @@ use snforge_std::{
 };
 use starknet::ContractAddress;
 use starknet::account::Call;
-use derrick_executor::{IArbExecutorDispatcher, IArbExecutorDispatcherTrait};
+use derrick_executor::{IDerrickExecutorDispatcher, IDerrickExecutorDispatcherTrait};
 
 // ---------------------------------------------------------------------------
 // Mock ERC20
@@ -143,7 +143,7 @@ trait IMockReentrant<T> {
 mod MockReentrant {
     use starknet::ContractAddress;
     use starknet::account::Call;
-    use derrick_executor::{IArbExecutorDispatcher, IArbExecutorDispatcherTrait};
+    use derrick_executor::{IDerrickExecutorDispatcher, IDerrickExecutorDispatcherTrait};
 
     #[storage]
     struct Storage {}
@@ -152,7 +152,7 @@ mod MockReentrant {
     impl Impl of super::IMockReentrant<ContractState> {
         fn reenter(ref self: ContractState, executor: ContractAddress, token: ContractAddress) {
             let calls: Array<Call> = array![];
-            IArbExecutorDispatcher { contract_address: executor }.execute(token, 0_u256, calls);
+            IDerrickExecutorDispatcher { contract_address: executor }.execute(token, 0_u256, calls);
         }
     }
 }
@@ -169,12 +169,12 @@ fn other_addr() -> ContractAddress {
     0x9999.try_into().unwrap()
 }
 
-fn deploy_executor() -> (ContractAddress, IArbExecutorDispatcher) {
-    let contract = declare("ArbExecutor").unwrap().contract_class();
+fn deploy_executor() -> (ContractAddress, IDerrickExecutorDispatcher) {
+    let contract = declare("DerrickExecutor").unwrap().contract_class();
     let mut calldata = array![];
     Serde::serialize(@owner_addr(), ref calldata);
     let (addr, _) = contract.deploy(@calldata).unwrap();
-    (addr, IArbExecutorDispatcher { contract_address: addr })
+    (addr, IDerrickExecutorDispatcher { contract_address: addr })
 }
 
 fn deploy_token() -> (ContractAddress, IMockERC20Dispatcher) {
@@ -196,7 +196,7 @@ fn deploy_reentrant() -> ContractAddress {
 }
 
 /// Whitelist `(target, selector)` as the owner.
-fn allow(executor_addr: ContractAddress, exec: IArbExecutorDispatcher, target: ContractAddress, selector: felt252) {
+fn allow(executor_addr: ContractAddress, exec: IDerrickExecutorDispatcher, target: ContractAddress, selector: felt252) {
     start_cheat_caller_address(executor_addr, owner_addr());
     exec.allow_target(target, selector);
     stop_cheat_caller_address(executor_addr);
@@ -221,7 +221,7 @@ fn consume_call(dex: ContractAddress, token: ContractAddress, amount: u256) -> C
 /// Deploy executor + token + dex, whitelist produce & consume & boom, mint
 /// `initial` token to the executor. Returns the common handles.
 fn setup_full(initial: u256) -> (
-    ContractAddress, IArbExecutorDispatcher, ContractAddress, IMockERC20Dispatcher, ContractAddress,
+    ContractAddress, IDerrickExecutorDispatcher, ContractAddress, IMockERC20Dispatcher, ContractAddress,
 ) {
     let (exec_addr, exec) = deploy_executor();
     let (token_addr, token) = deploy_token();
@@ -233,7 +233,7 @@ fn setup_full(initial: u256) -> (
     (exec_addr, exec, token_addr, token, dex)
 }
 
-fn run_as_owner(exec_addr: ContractAddress, exec: IArbExecutorDispatcher, token: ContractAddress, min_profit: u256, calls: Array<Call>) -> u256 {
+fn run_as_owner(exec_addr: ContractAddress, exec: IDerrickExecutorDispatcher, token: ContractAddress, min_profit: u256, calls: Array<Call>) -> u256 {
     start_cheat_caller_address(exec_addr, owner_addr());
     let p = exec.execute(token, min_profit, calls);
     stop_cheat_caller_address(exec_addr);
@@ -248,7 +248,7 @@ fn run_as_owner(exec_addr: ContractAddress, exec: IArbExecutorDispatcher, token:
 fn constructor_rejects_zero_owner() {
     // A failed constructor surfaces as `Err(panic_data)` from `deploy`, so we
     // inspect the data directly rather than relying on `unwrap`'s own panic.
-    let contract = declare("ArbExecutor").unwrap().contract_class();
+    let contract = declare("DerrickExecutor").unwrap().contract_class();
     let zero: ContractAddress = 0.try_into().unwrap();
     let mut calldata = array![];
     Serde::serialize(@zero, ref calldata);

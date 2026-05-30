@@ -1,37 +1,20 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: derrick
-      POSTGRES_PASSWORD: derrick
-      POSTGRES_DB: derrick
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "derrick"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   dev:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
+      target: dev
     working_dir: /workspace
     volumes:
       - ./:/workspace
       - cargo-cache:/usr/local/cargo/registry
       - target-cache:/workspace/target
     environment:
-      DATABASE_URL: postgres://derrick:derrick@postgres:5432/derrick
       CARGO_TARGET_DIR: /workspace/target
       RUST_BACKTRACE: "1"
     profiles: ["dev"]
     command: bash
 
 volumes:
-  postgres-data:
   cargo-cache:
   target-cache:

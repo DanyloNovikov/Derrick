@@ -49,7 +49,7 @@ When reviewing code, check the system is resilient against:
 |---|---|
 | MEV / front-running by sequencer | Thin spreads → don't send (`min_profit` threshold). On-chain assert protects against execution at worse prices. |
 | Stale state (reserves outdated) | State versioning, pre-send simulation, on-chain assert. |
-| Compromised operator key | Whitelist of DEX addresses and selectors in the executor, Pausable, capital cap on the executor. |
+| Compromised owner key (Oracle wallet) | Whitelist of DEX addresses and selectors in the executor, Pausable, capital cap on the executor. |
 | Honeypot token | Token whitelist, fuzz the `transfer` function when onboarding a new token. |
 | Reentrancy in a DEX | `ReentrancyGuard` in the executor, no arbitrary `Call`s passed into `execute`. |
 | RPC returning false data | Multiple independent RPC sources, cross-validation of critical reads. |

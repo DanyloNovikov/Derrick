@@ -1,27 +1,26 @@
 # derrick — default config. Override fields via DERRICK__<SECTION>__<FIELD>
-# environment variables (e.g., DERRICK__DATABASE__URL).
+# environment variables (e.g., DERRICK__NETWORK__RPC_URL).
 #
 # Secrets (private keys) are NEVER in config. They're read from environment:
-#   OPERATOR_PRIVATE_KEY=<hex>
+#   OWNER_PRIVATE_KEY=<hex>     # the Oracle wallet's signing key
 
 [network]
 rpc_url  = "http://localhost:9545"          # Pathfinder/Juno local node
 ws_url   = "ws://localhost:9545/ws"
 chain_id = "SN_MAIN"
 
-[database]
-url = "postgres://derrick:derrick@postgres:5432/derrick"
-
 [observability]
 log_level    = "info,derrick=debug"
 metrics_bind = "0.0.0.0:9090"
 
 [executor]
-# Placeholder addresses. Real values land after the Cairo contract is deployed.
-contract_address          = "0x0"
-operator_account_address  = "0x0"
-chain_id                  = "SN_MAIN"          # or "SN_SEPOLIA", or raw hex felt
-paper_trading             = false              # true = sim only, no signed submit
+# Placeholder addresses. Real values land after the Cairo contract is deployed
+# by the Oracle wallet. `owner_account_address` is the Oracle wallet's address —
+# the on-chain `DerrickExecutor` contract gates execute() on `caller == owner`.
+contract_address       = "0x0"
+owner_account_address  = "0x0"
+chain_id               = "SN_MAIN"             # or "SN_SEPOLIA", or raw hex felt
+paper_trading          = false                 # true = sim only, no signed submit
 
 [risk]
 max_consecutive_failures      = 5

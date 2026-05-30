@@ -1,8 +1,8 @@
-//! Client for the on-chain `ArbExecutor` Cairo contract.
+//! Client for the on-chain `DerrickExecutor` Cairo contract.
 //!
 //! `ExecutorClient` is a pure data-transformer: given a token, a min-profit
 //! bound, and a list of inner calls, it serializes the calldata for
-//! `ArbExecutor::execute`. It does NOT perform I/O. Sending the resulting
+//! `DerrickExecutor::execute`. It does NOT perform I/O. Sending the resulting
 //! transaction is the caller's job (in production via `starknet-rs`).
 //!
 //! Serialization layout (matches the Cairo ABI):
@@ -36,7 +36,7 @@ pub struct ExecutorCall {
     pub calldata: Vec<Felt>,
 }
 
-/// Builds calldata for the on-chain `ArbExecutor` contract at `executor_address`.
+/// Builds calldata for the on-chain `DerrickExecutor` contract at `executor_address`.
 #[derive(Clone, Debug)]
 pub struct ExecutorClient {
     executor_address: Felt,
@@ -51,7 +51,7 @@ impl ExecutorClient {
         self.executor_address
     }
 
-    /// Serialize the calldata for `ArbExecutor::execute(token_in, min_profit, calls)`.
+    /// Serialize the calldata for `DerrickExecutor::execute(token_in, min_profit, calls)`.
     ///
     /// The Cairo `u256` is two felts: low (u128) then high (u128).
     /// `Array<Call>` is serialized as `len` then each `Call` flattened

@@ -7,8 +7,8 @@ members = [
     "crates/strategy",
     "crates/chain",
     "crates/risk",
-    "crates/ledger",
     "crates/bot",
+    "crates/admin-cli",
 ]
 
 [workspace.package]
@@ -27,8 +27,8 @@ dex      = { path = "crates/dex" }
 strategy = { path = "crates/strategy" }
 chain    = { path = "crates/chain" }
 risk     = { path = "crates/risk" }
-ledger   = { path = "crates/ledger" }
 bot      = { path = "crates/bot" }
+admin-cli = { path = "crates/admin-cli" }
 
 # Async runtime / utilities
 tokio              = { version = "1.52", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
@@ -61,8 +61,7 @@ tracing-subscriber          = { version = "0.3", features = ["env-filter", "json
 metrics                     = "0.24"
 metrics-exporter-prometheus = "0.18"
 
-# Storage / concurrency
-sqlx    = { version = "0.9", features = ["runtime-tokio", "tls-rustls-ring", "postgres", "macros", "uuid", "chrono", "bigdecimal", "migrate"] }
+# Concurrency
 dashmap = "6"
 
 # Graph (triangular arb)

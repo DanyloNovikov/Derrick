@@ -1,6 +1,6 @@
 [package]
 name        = "bot"
-description = "derrick — binary that wires watcher, detector, sizer, simulator, executor, risk, ledger."
+description = "derrick — binary that wires watcher, detector, sizer, simulator, executor, risk."
 version.workspace      = true
 edition.workspace      = true
 authors.workspace      = true
@@ -21,7 +21,6 @@ chain    = { workspace = true }
 dex      = { workspace = true }
 strategy = { workspace = true }
 risk     = { workspace = true }
-ledger   = { workspace = true }
 
 primitive-types     = { workspace = true }
 starknet            = { workspace = true }

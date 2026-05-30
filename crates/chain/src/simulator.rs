@@ -26,7 +26,7 @@ pub struct SimulationResult {
     pub divergence_bps: u32,
 }
 
-/// Run `ArbExecutor::execute` as a read-only call against the Pending block
+/// Run `DerrickExecutor::execute` as a read-only call against the Pending block
 /// and parse the return value.
 ///
 /// Returns `ChainError::ModelDivergence` if the realized profit deviates from
